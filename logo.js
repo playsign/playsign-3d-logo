@@ -13,26 +13,26 @@ LogoApp.logoAssetUrl = "Logo10-mat_tex.json";
 
 LogoApp.init = function() {
     var container = document.createElement("div");
-    this.prevUpdateMillis = Date.now();
+    this.cubeDebug = false;
+    this.prevUpdateMillis = null;
     document.body.appendChild(container);
-    var r;
-    var opts = {antialias: true};
     this.scene = new THREE.Scene;
+    var opts = {antialias: true};
     try {
-        this.renderer = r = new THREE.WebGLRenderer(opts);
+        this.renderer = new THREE.WebGLRenderer(opts);
     } catch (e) {
         return false;
     }
-    r.setPixelRatio(window.devicePixelRatio || 1);
-    this.logoInitialRotationY = -Math.PI/1.85;
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.logoInitialRotationY = -Math.PI/2;
     this.maximumWidth = 500;
     this.renderWidth = 258; this.renderHeight = 185;   
     this.scalingUp = this.scalingDown = false;
     //this.scalingUp = true;
     this.minimumWidth = this.renderWidth;
-    r.setSize(this.renderWidth, this.renderHeight);
-    // r.setClearColor( scene.fog.color );
-    container.appendChild(r.domElement);
+    this.renderer.setSize(this.renderWidth, this.renderHeight);
+    // this.renderer.setClearColor( scene.fog.color );
+    container.appendChild(this.renderer.domElement);
     console.log("init fini");
 
     this.turnsPerSec = .025;
@@ -49,13 +49,28 @@ LogoApp.init = function() {
 };
 
 LogoApp.setupCameraAndLights = function() {
-    this.camera = new THREE.PerspectiveCamera(25, this.renderWidth / this.renderHeight, 1, 26.5);
+    if (this.cubeDebug) {
+        this.camera = new THREE.PerspectiveCamera(45, this.renderWidth / this.renderHeight, 1, 2000);
+        this.camera.position.z = 500;
+    } else {
+        this.camera = new THREE.PerspectiveCamera(30, this.renderWidth / this.renderHeight, 1, 36.75);
+        this.camera.position.y = 1;
+        this.camera.position.z = 5;
+        this.camera.position.x = -31;
+        this.camera.lookAt(new THREE.Vector3(20, 0, 0));
+    }
 
-    
-    this.camera.position.y = 1;
-//    this.camera.position.y = 11;
-    this.camera.position.x = -31;
-    this.camera.lookAt(new THREE.Vector3(20, 0, 0));
+    this.cubeMaterial = new THREE.MeshBasicMaterial({color: "blue", wireframe: true});    
+    //this.cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(200, 200, 200), this.cubeMaterial);
+    this.cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(200, 200, 200), new THREE.MeshBasicMaterial({
+        wireframe: true,
+        color: 'blue'
+      }));
+    this.cubeMesh.name = "kuupio";
+    this.scene.add(this.cubeMesh);    
+    // this.cubeMesh.position.set(-10, 0, 0);
+    // this.cubeMesh.scale.set(5, 5, 5);
+    console.log("cube added and positioned");
 
     var thisIsThis = this;
     // var cameraPos = { x: -31, y: 1, z: 0 };
@@ -92,7 +107,6 @@ LogoApp.setupAssets = function() {
         thisIsThis.loadedParent.rotation.y = thisIsThis.logoInitialRotationY;
         objectsToAdd.map(function(o) { thisIsThis.loadedParent.add(o) });
         thisIsThis.scene.add(thisIsThis.loadedParent);
-        thisIsThis.prevUpdateMillis = Date.now();
         thisIsThis.animate();
     };
     loader.load(this.logoAssetUrl, logoLoadedCallback);
@@ -116,25 +130,35 @@ LogoApp.setupPostprocessing = function() {
     this.composer.addPass(effectCopy);
 };
 
-LogoApp.animate = function(oneShot) {
+LogoApp.startRotating = function() {
+    this.prevUpdateMillis = Date.now();
 
+};
+
+LogoApp.animate = function(oneShot) {
     if (this.renderWidth < this.maximumWidth && this.scalingUp)
        this.resize(this.renderWidth + 2, this.renderHeight + 1);
     else if (this.renderWidth > this.minimumWidth && this.scalingDown)
        this.resize(this.renderWidth - 2, this.renderHeight - 1);
 
+    this.cubeMesh.rotation.x += Math.PI*2*turnsPerCurrentFrame;
+    
     // XXX why compute turn increment for this frame, instead of computing
     // correct rotation for this time offset since beginning
-    var nowMillis = Date.now();
-    var frametimeSeconds = (nowMillis - this.prevUpdateMillis) / 1000.0;
-    var turnsPerCurrentFrame = this.turnsPerSec * frametimeSeconds;
-    this.prevUpdateMillis = nowMillis;
-    
-    //this.animRotationMatrix.makeRotationZ(Math.PI*2*turnsPerCurrentFrame);
-    //this.cubeMesh.rotation.x += Math.PI*2*turnsPerCurrentFrame;
-    this.animRotationMatrix.makeRotationZ(Math.PI*2*turnsPerCurrentFrame);
-    if (this.loadedParent)
-        this.loadedParent.rotation.y += Math.PI*2*turnsPerCurrentFrame;
+    if (this.prevUpdateMillis && this.loadedParent) {
+        var nowMillis = Date.now();
+        var frametimeSeconds = (nowMillis - this.prevUpdateMillis) / 1000.0;
+        var turnsPerCurrentFrame = this.turnsPerSec * frametimeSeconds;
+        this.prevUpdateMillis = nowMillis;
+        
+        this.animRotationMatrix.makeRotationZ(Math.PI*2*turnsPerCurrentFrame);
+        if (this.camera.far < 50) {
+            this.camera.far += .05;
+            this.camera.updateProjectionMatrix();
+        }
+        if (this.loadedParent)
+            this.loadedParent.rotation.y += Math.PI*2*turnsPerCurrentFrame;
+    }
     var thisIsThis = this;
     if (this.scalingUp || this.scalingDown || oneShot) {
         requestAnimationFrame(function() { thisIsThis.animate(); });
@@ -147,7 +171,7 @@ LogoApp.animate = function(oneShot) {
         this.renderer.render(this.scene, this.camera);
     }
     var renderElapsed = performance.now() - renderStart;
-    console.log("render took " + renderElapsed);
+    //console.log("render took " + renderElapsed);
 };
 
 LogoApp.resize = function(width, height) {
@@ -163,9 +187,9 @@ LogoApp.resize = function(width, height) {
 };
 
 if (LogoApp.init() == true) {
-    // LogoApp.animate();
+    LogoApp.animate();
     42;
 } else
     console.log("webgl logo init failed");
 
-window.setTimeout(function() {LogoApp.scalingUp = true; LogoApp.animate();}, 5000);
+window.setTimeout(function() {LogoApp.scalingUp = true; LogoApp.startRotating(); LogoApp.animate();}, 1000);
